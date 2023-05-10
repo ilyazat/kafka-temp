@@ -2,31 +2,22 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"github.com/segmentio/kafka-go"
-	"log"
+	"kafka_template/internal/kafkaRW"
 )
 
 const (
-	TopicName = "test_topic"
+	TopicName     = "test_topic"
+	BrokerAddress = "localhost:9092"
 )
 
-type KafkaMessage struct {
-	Author      string `json:"author"`
-	Commit      string `json:"commit"`
-	Description string `json:"description"`
-	ProjectKey  string `json:"projectKey"`
-}
-
 func main() {
-	brokers := []string{"localhost:9092"}
+	brokers := []string{BrokerAddress}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	msgCh := make(chan KafkaMessage, 1)
+	msgCh := make(chan kafkaRW.KafkaMessage, 1)
 	go func() {
-		err := consumeMessage(ctx, brokers, TopicName, msgCh)
-		if err != nil {
+		if err := kafkaRW.ConsumeMessage(ctx, brokers, TopicName, msgCh); err != nil {
 			cancel()
 		}
 	}()
@@ -40,52 +31,4 @@ func main() {
 			}
 		}
 	}()
-}
-
-func sendMsgToJira() {
-
-}
-
-func consumeMessage(ctx context.Context, brokers []string, topic string, msgCh chan KafkaMessage) error {
-	reader := kafka.NewReader(kafka.ReaderConfig{
-		Brokers: brokers,
-		Topic:   topic,
-	})
-
-	for {
-		select {
-		case <-ctx.Done():
-			err := reader.Close()
-			if err != nil {
-				return err
-			}
-			return nil
-		default:
-			msg, err := reader.FetchMessage(ctx)
-			if err != nil {
-				return err
-			}
-			kafkaMsg, err := parseKafkaMsg(&msg)
-			if err != nil {
-				return err
-			}
-			err = reader.CommitMessages(ctx, msg)
-			if err != nil {
-				return err
-			}
-			msgCh <- kafkaMsg
-			return nil
-		}
-	}
-}
-
-func parseKafkaMsg(msg *kafka.Message) (KafkaMessage, error) {
-	var kafkaMsg KafkaMessage
-	err := json.Unmarshal(msg.Value, &kafkaMsg)
-	if err != nil {
-		log.Printf("Error unmarshalling message: %v", err)
-	} else {
-		log.Printf("Received message: %+v", kafkaMsg)
-	}
-	return kafkaMsg, err
 }
